@@ -32,7 +32,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const participantsHtml =
           details.participants && details.participants.length
             ? `<ul class="participants-list">${details.participants
-                .map((p) => `<li>${escapeHtml(p)}</li>`)
+                .map(
+                  (p) =>
+                    `<li class="participant-item"><span class="participant-email">${escapeHtml(
+                      p
+                    )}</span><button class="participant-remove" data-activity="${escapeHtml(
+                      name
+                    )}" data-email="${escapeHtml(
+                      p
+                    )}" aria-label="Remove participant">&times;</button></li>`
+                )
                 .join("")}</ul>`
             : `<p class="no-participants">No participants yet</p>`;
 
@@ -54,6 +63,47 @@ document.addEventListener("DOMContentLoaded", () => {
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+      });
+      // Attach remove handlers (delegation not needed because cards are recreated)
+      document.querySelectorAll(".participant-remove").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const activityName = btn.dataset.activity;
+          const email = btn.dataset.email;
+
+          if (!activityName || !email) return;
+
+          if (!confirm(`Remove ${email} from ${activityName}?`)) return;
+
+          try {
+            const resp = await fetch(
+              `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(
+                email
+              )}`,
+              { method: "DELETE" }
+            );
+
+            const resBody = await resp.json();
+            if (resp.ok) {
+              messageDiv.textContent = resBody.message;
+              messageDiv.className = "success";
+              messageDiv.classList.remove("hidden");
+              // Refresh activities to show updated participants
+              fetchActivities();
+            } else {
+              messageDiv.textContent = resBody.detail || "Failed to remove participant";
+              messageDiv.className = "error";
+              messageDiv.classList.remove("hidden");
+            }
+
+            setTimeout(() => messageDiv.classList.add("hidden"), 4000);
+          } catch (err) {
+            console.error("Error removing participant:", err);
+            messageDiv.textContent = "Failed to remove participant. Please try again.";
+            messageDiv.className = "error";
+            messageDiv.classList.remove("hidden");
+            setTimeout(() => messageDiv.classList.add("hidden"), 4000);
+          }
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
@@ -82,6 +132,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the new participant appears immediately
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
